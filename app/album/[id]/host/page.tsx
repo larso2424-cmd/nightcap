@@ -41,34 +41,25 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
     return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
   }
 
+  function robustCopy(text: string) {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed"; el.style.top = "-9999px"; el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.focus(); el.select();
+    try { document.execCommand("copy"); } catch {}
+    document.body.removeChild(el);
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
+
   function copyGuestLink() {
-    const url = `${window.location.origin}/album/${albumId}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).catch(() => fallbackCopy(url));
-    } else {
-      fallbackCopy(url);
-    }
+    robustCopy(`${window.location.origin}/album/${albumId}`);
     setCopiedGuest(true); setTimeout(() => setCopiedGuest(false), 2000);
   }
 
   function copyHostLink() {
-    const url = `${window.location.origin}/album/${albumId}/host?token=${hostToken}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).catch(() => fallbackCopy(url));
-    } else {
-      fallbackCopy(url);
-    }
+    robustCopy(`${window.location.origin}/album/${albumId}/host?token=${hostToken}`);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
-  }
-
-  function fallbackCopy(text: string) {
-    const el = document.createElement("textarea");
-    el.value = text;
-    el.style.position = "fixed"; el.style.opacity = "0";
-    document.body.appendChild(el);
-    el.focus(); el.select();
-    document.execCommand("copy");
-    document.body.removeChild(el);
   }
 
   async function deleteMedia(mediaId: string) {
