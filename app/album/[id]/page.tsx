@@ -177,8 +177,10 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const ext = item.mime.split("/")[1] ?? "jpg";
     const filename = `nightcap-${item.id}.${ext}`;
 
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     // On mobile: use Web Share API → native "Save to Photos" / "Save to Gallery" sheet
-    if (navigator.canShare) {
+    if (isMobile && navigator.canShare) {
       try {
         const blob = await fetch(proxyUrl).then(r => r.blob());
         const file = new File([blob], filename, { type: item.mime });
@@ -189,7 +191,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
       } catch {}
     }
 
-    // Desktop fallback: anchor download → Finder / Downloads
+    // Desktop: anchor download → Finder / Downloads folder
     const a = document.createElement("a");
     a.href = proxyUrl;
     a.download = filename;
@@ -200,7 +202,9 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
 
-    if (navigator.canShare?.({ files: [new File([], "test")] })) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile && navigator.canShare?.({ files: [new File([], "test")] })) {
       try {
         const files = await Promise.all(others.map(async (item) => {
           const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
