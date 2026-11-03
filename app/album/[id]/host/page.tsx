@@ -22,7 +22,15 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     params.then(({ id }) => {
       setAlbumId(id);
-      try { setHostToken(localStorage.getItem(`host_token_${id}`) ?? ""); } catch {}
+      const urlToken = new URLSearchParams(window.location.search).get("token") ?? "";
+      try {
+        if (urlToken) {
+          localStorage.setItem(`host_token_${id}`, urlToken);
+          setHostToken(urlToken);
+        } else {
+          setHostToken(localStorage.getItem(`host_token_${id}`) ?? "");
+        }
+      } catch { if (urlToken) setHostToken(urlToken); }
       fetch(`/api/albums/${id}`).then(r => r.json()).then(d => { if (!d.error) setAlbum(d); });
       fetch(`/api/media?albumId=${id}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMedia(d); });
     });
