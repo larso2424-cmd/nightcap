@@ -323,10 +323,12 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
                   style={{ padding: "0.65rem 1rem", borderRadius: "0.5rem", border: "none", background: "var(--accent)", color: "var(--accent-fg)", fontWeight: 700, cursor: "pointer", textAlign: "left" }}>
                   Download to Finder
                 </button>
-                <button onClick={shareOthers}
-                  style={{ padding: "0.65rem 1rem", borderRadius: "0.5rem", border: "none", background: "transparent", color: "var(--fg)", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
-                  Add to Photos
-                </button>
+                {/iPhone|iPad|iPod|Android/i.test(typeof navigator !== "undefined" ? navigator.userAgent : "") && (
+                  <button onClick={shareOthers}
+                    style={{ padding: "0.65rem 1rem", borderRadius: "0.5rem", border: "none", background: "transparent", color: "var(--fg)", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                    Add to Photos
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -366,10 +368,12 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
                 style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--accent)", color: "var(--accent-fg)", border: "none", fontWeight: 700, cursor: "pointer" }}>
                 Download
               </button>
-              <button onClick={() => shareToPhotos(lightbox)}
-                style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--card)", color: "var(--fg)", border: "1px solid var(--border)", fontWeight: 600, cursor: "pointer" }}>
-                Add to Photos
-              </button>
+              {/iPhone|iPad|iPod|Android/i.test(typeof navigator !== "undefined" ? navigator.userAgent : "") && (
+                <button onClick={() => shareToPhotos(lightbox)}
+                  style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--card)", color: "var(--fg)", border: "1px solid var(--border)", fontWeight: 600, cursor: "pointer" }}>
+                  Add to Photos
+                </button>
+              )}
               {lightbox.guest_id === guestId && (
                 <button onClick={() => deleteMedia(lightbox.id)}
                   style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--card)", color: "#ff5555", border: "1px solid var(--border)", cursor: "pointer" }}>
