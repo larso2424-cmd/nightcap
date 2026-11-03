@@ -172,6 +172,19 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     loadMedia();
   }
 
+  async function shareToPhotos(item: MediaItem) {
+    const proxyUrl = `/api/download/${item.id}`;
+    const ext = item.mime.split("/")[1] ?? "jpg";
+    const filename = `nightcap-${item.id}.${ext}`;
+    try {
+      const blob = await fetch(proxyUrl).then(r => r.blob());
+      const file = new File([blob], filename, { type: item.mime });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      }
+    } catch {}
+  }
+
   async function downloadSingle(item: MediaItem) {
     const proxyUrl = `/api/download/${item.id}`;
     const ext = item.mime.split("/")[1] ?? "jpg";
@@ -334,10 +347,14 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
               ? <video src={lightbox.url} controls autoPlay playsInline style={{ width: "100%", borderRadius: "0.5rem" }} />
               : <img src={lightbox.url} alt="" style={{ width: "100%", borderRadius: "0.5rem", maxHeight: "70vh", objectFit: "contain" }} />
             }
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", justifyContent: "center" }}>
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
               <button onClick={() => downloadSingle(lightbox)}
                 style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--accent)", color: "var(--accent-fg)", border: "none", fontWeight: 700, cursor: "pointer" }}>
                 Download
+              </button>
+              <button onClick={() => shareToPhotos(lightbox)}
+                style={{ padding: "0.6rem 1.25rem", borderRadius: "0.5rem", background: "var(--card)", color: "var(--fg)", border: "1px solid var(--border)", fontWeight: 600, cursor: "pointer" }}>
+                Add to Photos
               </button>
               {lightbox.guest_id === guestId && (
                 <button onClick={() => deleteMedia(lightbox.id)}
