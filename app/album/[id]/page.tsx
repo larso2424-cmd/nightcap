@@ -64,6 +64,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
+  const [saveMenu, setSaveMenu] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -214,22 +215,21 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   async function downloadOthers() {
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
-
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile && navigator.canShare?.({ files: [new File([], "test")] })) {
-      try {
-        const files = await Promise.all(others.map(async (item) => {
-          const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
-          return new File([blob], `nightcap-${item.id}.${item.mime.split("/")[1] ?? "jpg"}`, { type: item.mime });
-        }));
-        await navigator.share({ files, title: album?.name });
-        return;
-      } catch {}
-    }
-
-    // Desktop: download individually to Finder
+    setSaveMenu(false);
     for (const item of others) await downloadSingle(item);
+  }
+
+  async function shareOthers() {
+    const others = media.filter(m => m.guest_id !== guestId);
+    if (!others.length) return;
+    setSaveMenu(false);
+    try {
+      const files = await Promise.all(others.map(async (item) => {
+        const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
+        return new File([blob], `nightcap-${item.id}.${item.mime.split("/")[1] ?? "jpg"}`, { type: item.mime });
+      }));
+      if (navigator.canShare?.({ files })) await navigator.share({ files, title: album?.name });
+    } catch {}
   }
 
   async function deleteMedia(mediaId: string) {
@@ -312,10 +312,24 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
           </button>
         ))}
         {media.some(m => m.guest_id !== guestId) && (
-          <button onClick={downloadOthers}
-            style={{ marginLeft: "auto", padding: "0.4rem 0.9rem", borderRadius: "2rem", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--fg)" }}>
-            Save everyone's
-          </button>
+          <div style={{ marginLeft: "auto", position: "relative" }}>
+            <button onClick={() => setSaveMenu(v => !v)}
+              style={{ padding: "0.4rem 0.9rem", borderRadius: "2rem", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--fg)" }}>
+              Save everyone's
+            </button>
+            {saveMenu && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 0.5rem)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.5rem", display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 180, zIndex: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+                <button onClick={downloadOthers}
+                  style={{ padding: "0.65rem 1rem", borderRadius: "0.5rem", border: "none", background: "var(--accent)", color: "var(--accent-fg)", fontWeight: 700, cursor: "pointer", textAlign: "left" }}>
+                  Download to Finder
+                </button>
+                <button onClick={shareOthers}
+                  style={{ padding: "0.65rem 1rem", borderRadius: "0.5rem", border: "none", background: "transparent", color: "var(--fg)", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  Add to Photos
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
