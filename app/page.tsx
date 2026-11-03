@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import copy from "@/lib/copy";
 
@@ -7,9 +7,16 @@ const c = copy.en;
 
 export default function Home() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [name, setName]       = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
+  const [userEmail, setUserEmail] = useState<string|null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session").then(r => r.json()).then(d => {
+      if (d.user?.email) setUserEmail(d.user.email);
+    });
+  }, []);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +43,15 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.5rem 3rem" }}>
+      {/* Top nav */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, padding: "1rem 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="display" style={{ fontSize: "1rem", letterSpacing: "0.08em", color: "var(--muted)" }}>NightCap</span>
+        {userEmail ? (
+          <a href="/dashboard" style={{ fontSize: "0.82rem", color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>My albums →</a>
+        ) : (
+          <a href="/auth" style={{ fontSize: "0.82rem", color: "var(--muted)", textDecoration: "none" }}>Sign in</a>
+        )}
+      </div>
       <div style={{ maxWidth: 480, width: "100%" }}>
         <h1 className="display" style={{ fontSize: "clamp(2.8rem, 10vw, 5rem)", lineHeight: 1, marginBottom: "1rem", whiteSpace: "pre-line" }}>
           {c.landing.headline}

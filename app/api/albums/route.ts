@@ -11,10 +11,13 @@ export async function POST(req: Request) {
   const hostTokenHash = hashToken(hostToken);
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
   const { error } = await supabase.from("albums").insert({
     id: albumId,
     name: name.trim(),
     host_token_hash: hostTokenHash,
+    ...(user ? { user_id: user.id } : {}),
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
