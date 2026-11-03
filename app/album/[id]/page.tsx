@@ -173,9 +173,26 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function downloadSingle(item: MediaItem) {
+    const proxyUrl = `/api/download/${item.id}`;
+    const ext = item.mime.split("/")[1] ?? "jpg";
+    const filename = `nightcap-${item.id}.${ext}`;
+
+    // On mobile: use Web Share API → native "Save to Photos" / "Save to Gallery" sheet
+    if (navigator.canShare) {
+      try {
+        const blob = await fetch(proxyUrl).then(r => r.blob());
+        const file = new File([blob], filename, { type: item.mime });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          return;
+        }
+      } catch {}
+    }
+
+    // Desktop fallback: anchor download → Finder / Downloads
     const a = document.createElement("a");
-    a.href = item.url;
-    a.download = `nightcap-${item.id}.${item.mime.split("/")[1]}`;
+    a.href = proxyUrl;
+    a.download = filename;
     a.click();
   }
 
@@ -186,8 +203,8 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     if (navigator.canShare?.({ files: [new File([], "test")] })) {
       try {
         const files = await Promise.all(others.map(async (item) => {
-          const blob = await fetch(item.url).then(r => r.blob());
-          return new File([blob], `nightcap-${item.id}.${item.mime.split("/")[1]}`, { type: item.mime });
+          const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
+          return new File([blob], `nightcap-${item.id}.${item.mime.split("/")[1] ?? "jpg"}`, { type: item.mime });
         }));
         await navigator.share({ files, title: album?.name });
         return;
