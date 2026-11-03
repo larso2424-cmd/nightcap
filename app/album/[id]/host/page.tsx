@@ -13,6 +13,7 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [hostToken, setHostToken] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedGuest, setCopiedGuest] = useState(false);
   const [tab, setTab] = useState<"qr" | "grid">("qr");
   const [guestUrl, setGuestUrl] = useState("");
   useEffect(() => {
@@ -38,6 +39,16 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
 
   function daysUntil(dateStr: string) {
     return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+  }
+
+  function copyGuestLink() {
+    const url = `${window.location.origin}/album/${albumId}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).catch(() => fallbackCopy(url));
+    } else {
+      fallbackCopy(url);
+    }
+    setCopiedGuest(true); setTimeout(() => setCopiedGuest(false), 2000);
   }
 
   function copyHostLink() {
@@ -108,6 +119,10 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
             </div>
           )}
           <p className="display" style={{ fontSize: "1.5rem" }}>{c.host.scanPrompt}</p>
+          <button onClick={copyGuestLink}
+            style={{ width: "100%", maxWidth: 360, background: "var(--accent)", color: "var(--accent-fg)", border: "none", padding: "0.85rem", borderRadius: "0.75rem", fontWeight: 700, fontSize: "1rem", cursor: "pointer" }}>
+            {copiedGuest ? "Copied!" : "Copy invite link"}
+          </button>
           <div style={{ width: "100%", maxWidth: 360, background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
             <p style={{ fontSize: "0.85rem", color: "var(--muted)" }}>⚠️ {c.host.saveLinkWarning}</p>
             <button onClick={copyHostLink}
