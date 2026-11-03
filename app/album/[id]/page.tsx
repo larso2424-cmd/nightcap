@@ -215,7 +215,9 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
 
-    if (navigator.canShare?.({ files: [new File([], "test")] })) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile && navigator.canShare?.({ files: [new File([], "test")] })) {
       try {
         const files = await Promise.all(others.map(async (item) => {
           const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
@@ -226,7 +228,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
       } catch {}
     }
 
-    // Fallback: download individually
+    // Desktop: download individually to Finder
     for (const item of others) await downloadSingle(item);
   }
 
