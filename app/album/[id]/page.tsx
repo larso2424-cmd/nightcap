@@ -311,7 +311,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <button onClick={() => setShowInvite(v => !v)}
             style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
-            Invite
+            Invite & save link
           </button>
           <button onClick={() => { setSelectMode(v => !v); setSelected(new Set()); }}
             style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: selectMode ? "1px solid var(--accent)" : "1px solid var(--border)", background: selectMode ? "var(--accent)" : "transparent", color: selectMode ? "var(--accent-fg)" : "var(--muted)", cursor: "pointer" }}>
@@ -331,11 +331,13 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
       {/* Invite panel */}
       {showInvite && (
         <div style={{ margin: "0 1rem 0.75rem", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem" }}>
-          <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginBottom: "0.75rem" }}>Share this link to invite people:</p>
           <button onClick={copyInviteLink}
-            style={{ width: "100%", background: "var(--accent)", color: "var(--accent-fg)", border: "none", padding: "0.75rem", borderRadius: "0.5rem", fontWeight: 700, cursor: "pointer" }}>
-            {inviteCopied ? "Copied!" : "Copy invite link"}
+            style={{ width: "100%", background: "var(--accent)", color: "var(--accent-fg)", border: "none", padding: "0.75rem", borderRadius: "0.5rem", fontWeight: 700, cursor: "pointer", marginBottom: "0.6rem" }}>
+            {inviteCopied ? "Copied!" : "Copy link"}
           </button>
+          <p style={{ fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.4 }}>
+            Send this to friends to invite them — or <strong style={{ color: "rgba(255,255,255,0.6)" }}>bookmark it yourself</strong> so you can come back later.
+          </p>
         </div>
       )}
 
