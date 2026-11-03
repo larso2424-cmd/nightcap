@@ -215,9 +215,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
 
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile && navigator.canShare?.({ files: [new File([], "test")] })) {
+    if (navigator.canShare?.({ files: [new File([], "test")] })) {
       try {
         const files = await Promise.all(others.map(async (item) => {
           const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
