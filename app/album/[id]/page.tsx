@@ -102,6 +102,8 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const [selectMode, setSelectMode]     = useState(false);
   const [showInvite, setShowInvite]     = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [saveCopied, setSaveCopied]     = useState(false);
   const [joining, setJoining]           = useState(false);
   const [albumError, setAlbumError]     = useState("");
   const [error, setError]               = useState("");
@@ -159,6 +161,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     if (!res.ok) { setError(data.error); setJoining(false); return; }
     try { localStorage.setItem(`guest_${albumId}`, JSON.stringify({ guestId: data.guestId, guestToken: data.guestToken, name })); } catch {}
     setGuestId(data.guestId); setGuestToken(data.guestToken); setJoined(true); setJoining(false);
+    setShowSavePrompt(true);
   }
 
   // ── Upload ────────────────────────────────────────────────────
@@ -371,6 +374,30 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
           {media.length} {media.length === 1 ? "photo" : "photos"} · {new Set(media.map(m => m.guest_id)).size} people
         </p>
       </div>
+
+      {/* Save link prompt — shown once after joining */}
+      {showSavePrompt && (
+        <div style={{ margin: "0 1rem 0.75rem", background: "var(--card)", border: "1px solid var(--accent)", borderRadius: "0.75rem", padding: "0.9rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: "0.88rem", fontWeight: 700, marginBottom: "0.15rem" }}>Save this link</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.4 }}>Bookmark or copy it now — you'll need it to come back later.</p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", flexShrink: 0 }}>
+            <button onClick={() => {
+              robustCopy(`${window.location.origin}/album/${albumId}`);
+              setSaveCopied(true);
+              setTimeout(() => { setSaveCopied(false); setShowSavePrompt(false); }, 1500);
+            }}
+              style={{ background: "var(--accent)", color: "var(--accent-fg)", border: "none", padding: "0.45rem 0.85rem", borderRadius: "0.5rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+              {saveCopied ? "Copied!" : "Copy link"}
+            </button>
+            <button onClick={() => setShowSavePrompt(false)}
+              style={{ background: "transparent", color: "var(--muted)", border: "none", fontSize: "0.75rem", cursor: "pointer", textAlign: "center" }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Invite panel */}
       {showInvite && (
