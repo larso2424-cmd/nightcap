@@ -22,8 +22,8 @@ export default function AuthPage() {
   }
 
   return (
-    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", padding: "2rem 1.5rem 3rem" }}>
-      <div>
+    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", padding: "2rem 1.5rem 3rem" }}>
+      <div style={{ width: "100%", maxWidth: 480 }}>
         <span className="display" style={{ fontSize: "1rem", letterSpacing: "0.08em", color: "var(--muted)" }}>NightCap</span>
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: 480, width: "100%", paddingTop: "3rem" }}>
