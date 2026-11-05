@@ -7,10 +7,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const supabase = await createClient();
 
-  await Promise.all([
+  const [{ data: existing }] = await Promise.all([
+    supabase.from("media").select("report_count").eq("id", id).single(),
     supabase.from("reports").insert({ media_id: id, reason }),
-    supabase.from("media").update({ report_count: supabase.rpc("increment_report_count", { media_id: id }) }).eq("id", id),
   ]);
+  if (existing) {
+    await supabase.from("media").update({ report_count: (existing.report_count ?? 0) + 1 }).eq("id", id);
+  }
 
   return NextResponse.json({ ok: true });
 }

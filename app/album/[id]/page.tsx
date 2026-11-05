@@ -40,7 +40,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   throw last;
 }
 
-type Album     = { id: string; name: string };
+type Album     = { id: string; name: string; expires_at: string };
 type MediaItem = { id: string; guest_id: string; url: string; thumbUrl: string; type: string; mime: string; width?: number; height?: number; created_at: string; guests: { name: string }; };
 type UploadItem= { id: string; file: File; status: "waiting"|"uploading"|"done"|"failed"; progress: number; error?: string; };
 
@@ -103,6 +103,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const [showInvite, setShowInvite]     = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [joining, setJoining]           = useState(false);
+  const [albumError, setAlbumError]     = useState("");
   const [error, setError]               = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -125,7 +126,12 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     params.then(({ id }) => {
       setAlbumId(id);
-      fetch(`/api/albums/${id}`).then(r => r.json()).then(d => { if (!d.error) setAlbum(d); });
+      fetch(`/api/albums/${id}`).then(async r => {
+        const d = await r.json();
+        if (d.error || !r.ok) { setAlbumError(d.error ?? "Album not found"); return; }
+        if (new Date(d.expires_at) < new Date()) { setAlbumError("This album has expired"); return; }
+        setAlbum(d);
+      });
       try {
         const saved = localStorage.getItem(`guest_${id}`);
         if (saved) {
@@ -307,6 +313,15 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const othersCount = media.filter(m => m.guest_id !== guestId).length;
   const failedCount = uploadItems.filter(i => i.status === "failed").length;
   const isMobileUA  = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // ── Error screen ─────────────────────────────────────────────
+  if (albumError) return (
+    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
+      <p style={{ fontSize: "2rem", marginBottom: "1rem" }}>📭</p>
+      <h1 className="display" style={{ fontSize: "1.4rem", marginBottom: "0.75rem" }}>{albumError}</h1>
+      <p style={{ color: "var(--muted)" }}>This link may have expired or been removed.</p>
+    </main>
+  );
 
   // ── Join screen ───────────────────────────────────────────────
   if (!joined) return (

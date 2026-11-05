@@ -58,7 +58,7 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
   }
 
   function copyHostLink() {
-    robustCopy(`${window.location.origin}/album/${albumId}/host?token=${hostToken}`);
+    robustCopy(`${window.location.origin}/album/${albumId}/host`);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
 
@@ -73,6 +73,14 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
 
   const guests = new Set(media.map(m => m.guest_id)).size;
   const uploaders = new Set(media.filter(m => m.thumbUrl).map(m => m.guest_id)).size;
+
+  if (albumId && !hostToken) return (
+    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
+      <p style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>🔒</p>
+      <h1 className="display" style={{ fontSize: "1.4rem", marginBottom: "0.75rem" }}>Host access not found</h1>
+      <p style={{ color: "var(--muted)", maxWidth: 320 }}>This device doesn't have your host key saved. Open the host link on the device you used to create this album.</p>
+    </main>
+  );
 
   return (
     <main style={{ minHeight: "100dvh", paddingBottom: "3rem" }}>

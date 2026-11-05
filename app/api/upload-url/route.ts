@@ -29,13 +29,18 @@ export async function POST(req: Request) {
 
   const { data: guest } = await supabase
     .from("guests")
-    .select("id, album_id")
+    .select("id, album_id, albums(expires_at, deleted_at)")
     .eq("id", guestId)
     .eq("guest_token_hash", tokenHash)
     .single();
 
   if (!guest || guest.album_id !== albumId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const album = (guest as any).albums;
+  if (album?.deleted_at || (album?.expires_at && new Date(album.expires_at) < new Date())) {
+    return NextResponse.json({ error: "This album has expired" }, { status: 410 });
   }
 
   const ext = fileName.split(".").pop() ?? "bin";

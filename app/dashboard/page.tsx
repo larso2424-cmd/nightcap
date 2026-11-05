@@ -26,16 +26,14 @@ export default function DashboardPage() {
   const [email, setEmail]     = useState("");
 
   useEffect(() => {
-    // Check session
-    fetch("/api/auth/session").then(r => r.json()).then(d => {
-      if (!d.user) { router.replace("/auth"); return; }
-      setEmail(d.user.email ?? "");
-    });
-    // Load albums
-    fetch("/api/albums/mine").then(r => r.json()).then(d => {
+    (async () => {
+      const sd = await fetch("/api/auth/session").then(r => r.json());
+      if (!sd.user) { router.replace("/auth"); return; }
+      setEmail(sd.user.email ?? "");
+      const d = await fetch("/api/albums/mine").then(r => r.json());
       if (Array.isArray(d)) setAlbums(d);
       setLoading(false);
-    });
+    })();
   }, [router]);
 
   async function signOut() {

@@ -12,12 +12,13 @@ export async function POST(req: Request) {
 
   const { data: album } = await supabase
     .from("albums")
-    .select("id")
+    .select("id, expires_at")
     .eq("id", albumId)
     .is("deleted_at", null)
     .single();
 
   if (!album) return NextResponse.json({ error: "Album not found" }, { status: 404 });
+  if (new Date(album.expires_at) < new Date()) return NextResponse.json({ error: "This album has expired" }, { status: 410 });
 
   const guestToken = generateToken(20);
   const guestTokenHash = hashToken(guestToken);
