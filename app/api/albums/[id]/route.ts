@@ -6,7 +6,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("albums")
-    .select("id, name, expires_at")
+    .select("id, name, expires_at, user_id")
     .eq("id", id)
     .is("deleted_at", null)
     .single();

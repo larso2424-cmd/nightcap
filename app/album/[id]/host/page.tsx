@@ -4,7 +4,7 @@ import QRCode from "react-qr-code";
 import copy from "@/lib/copy";
 
 const c = copy.en;
-type Album = { id: string; name: string; expires_at: string };
+type Album = { id: string; name: string; expires_at: string; user_id: string };
 type MediaItem = { id: string; guest_id: string; thumbUrl: string; url: string; type: string; mime: string; guests: { name: string }; report_count: number };
 
 export default function HostPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,18 +21,32 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
   }, [albumId]);
 
   useEffect(() => {
-    params.then(({ id }) => {
+    params.then(async ({ id }) => {
       setAlbumId(id);
+
+      // Try localStorage token first
       const urlToken = new URLSearchParams(window.location.search).get("token") ?? "";
+      let token = "";
       try {
-        if (urlToken) {
-          localStorage.setItem(`host_token_${id}`, urlToken);
-          setHostToken(urlToken);
-        } else {
-          setHostToken(localStorage.getItem(`host_token_${id}`) ?? "");
+        if (urlToken) { localStorage.setItem(`host_token_${id}`, urlToken); token = urlToken; }
+        else { token = localStorage.getItem(`host_token_${id}`) ?? ""; }
+      } catch { if (urlToken) token = urlToken; }
+
+      // Fall back to session ownership check
+      if (!token) {
+        const [sessionData, albumData] = await Promise.all([
+          fetch("/api/auth/session").then(r => r.json()),
+          fetch(`/api/albums/${id}`).then(r => r.json()),
+        ]);
+        if (!albumData.error) setAlbum(albumData);
+        if (sessionData.user?.id && albumData.user_id === sessionData.user.id) {
+          token = "__owner__";
         }
-      } catch { if (urlToken) setHostToken(urlToken); }
-      fetch(`/api/albums/${id}`).then(r => r.json()).then(d => { if (!d.error) setAlbum(d); });
+      } else {
+        fetch(`/api/albums/${id}`).then(r => r.json()).then(d => { if (!d.error) setAlbum(d); });
+      }
+
+      setHostToken(token);
       fetch(`/api/media?albumId=${id}`).then(r => r.json()).then(d => { if (Array.isArray(d)) setMedia(d); });
     });
   }, [params]);
@@ -66,7 +80,7 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
     await fetch(`/api/media/${mediaId}/host-delete`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumId, hostToken }),
+      body: JSON.stringify({ albumId, hostToken: hostToken === "__owner__" ? null : hostToken, useOwnerAuth: hostToken === "__owner__" }),
     });
     setMedia(prev => prev.filter(m => m.id !== mediaId));
   }
