@@ -135,10 +135,19 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
         setAlbum(d);
       });
       try {
-        const saved = localStorage.getItem(`guest_${id}`);
-        if (saved) {
-          const { guestId: gid, guestToken: gt, name: n } = JSON.parse(saved);
+        // Try URL hash first (cross-device saved link)
+        const hashMatch = window.location.hash.match(/^#g=(.+)$/);
+        if (hashMatch) {
+          const { guestId: gid, guestToken: gt, name: n } = JSON.parse(atob(hashMatch[1]));
+          localStorage.setItem(`guest_${id}`, JSON.stringify({ guestId: gid, guestToken: gt, name: n }));
+          history.replaceState(null, "", window.location.pathname);
           setGuestId(gid); setGuestToken(gt); setName(n); setJoined(true);
+        } else {
+          const saved = localStorage.getItem(`guest_${id}`);
+          if (saved) {
+            const { guestId: gid, guestToken: gt, name: n } = JSON.parse(saved);
+            setGuestId(gid); setGuestToken(gt); setName(n); setJoined(true);
+          }
         }
       } catch {}
     });
@@ -180,16 +189,75 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const aid = albumIdRef.current, gid = guestIdRef.current, gt = guestTokenRef.current;
     const file = item.file;
     const mime = file.type || inferMime(file.name);
+    const isVideo = mime.startsWith("video/");
+
     const { dataUrl, width, height } = await generateThumb(file);
     const thumbBlob = await dataUrlToBlob(dataUrl);
     const thumbFile = new File([thumbBlob], "thumb.jpg", { type: "image/jpeg" });
-    const [urlData, thumbData] = await withRetry(() => Promise.all([
-      fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, fileName: file.name, contentType: mime, size: file.size }) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; }),
-      fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, fileName: "thumb.jpg", contentType: "image/jpeg", size: thumbFile.size }) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; }),
-    ]));
-    await withRetry(() => putWithProgress(urlData.uploadUrl, file, mime, (pct) => setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i))));
+
+    // Thumb always uses single PUT
+    const thumbData = await withRetry(() =>
+      fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, fileName: "thumb.jpg", contentType: "image/jpeg", size: thumbFile.size }) })
+        .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; })
+    );
     await withRetry(() => fetch(thumbData.uploadUrl, { method: "PUT", body: thumbFile, headers: { "Content-Type": "image/jpeg" } }).then(r => { if (!r.ok) throw new Error(`Thumb failed (${r.status})`); }));
-    await withRetry(() => fetch("/api/media", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, r2Key: urlData.r2Key, thumbKey: thumbData.r2Key, type: mime.startsWith("video/") ? "video" : "photo", mime, sizeBytes: file.size, width, height }) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; }));
+
+    let r2Key: string;
+
+    if (isVideo && file.size > 5 * 1024 * 1024) {
+      // ── Chunked multipart upload ──────────────────────────────
+      const initData = await withRetry(() =>
+        fetch("/api/upload-multipart/init", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, fileName: file.name, contentType: mime, size: file.size }) })
+          .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; })
+      );
+      r2Key = initData.r2Key;
+      const { uploadId, partUrls, partSize } = initData;
+      const parts: { ETag: string; PartNumber: number }[] = [];
+      let uploaded = 0;
+
+      for (let i = 0; i < partUrls.length; i++) {
+        const start = i * partSize;
+        const chunk = file.slice(start, start + partSize);
+        const etag = await withRetry(() => new Promise<string>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", partUrls[i]);
+          xhr.setRequestHeader("Content-Type", mime);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const partLoaded = uploaded + e.loaded;
+              setUploadItems(prev => prev.map(it => it.id === item.id ? { ...it, progress: Math.round(partLoaded / file.size * 100) } : it));
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              uploaded += chunk.size;
+              resolve(xhr.getResponseHeader("ETag") ?? "");
+            } else { reject(new Error(`Part ${i + 1} failed (${xhr.status})`)); }
+          };
+          xhr.onerror = () => reject(new Error("Network error on part " + (i + 1)));
+          xhr.send(chunk);
+        }));
+        parts.push({ PartNumber: i + 1, ETag: etag });
+      }
+
+      await fetch("/api/upload-multipart/complete", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ r2Key, uploadId, parts }) });
+    } else {
+      // ── Single PUT (photos + small videos) ───────────────────
+      const urlData = await withRetry(() =>
+        fetch("/api/upload-url", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, fileName: file.name, contentType: mime, size: file.size }) })
+          .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; })
+      );
+      r2Key = urlData.r2Key;
+      await withRetry(() => putWithProgress(urlData.uploadUrl, file, mime, (pct) => setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i))));
+    }
+
+    await withRetry(() => fetch("/api/media", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: aid, guestId: gid, guestToken: gt, r2Key, thumbKey: thumbData.r2Key, type: isVideo ? "video" : "photo", mime, sizeBytes: file.size, width, height }) })
+      .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? r.statusText); return d; }));
   }
 
   async function runUpload(item: UploadItem) {
@@ -279,6 +347,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function deleteMedia(mediaId: string) {
+    if (!confirm("Delete this photo?")) return;
     await fetch(`/api/media/${mediaId}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guestId, guestToken }) });
     setMedia(prev => prev.filter(m => m.id !== mediaId));
     setLightbox(null);
@@ -375,6 +444,13 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
         </p>
       </div>
 
+      {/* Expiry warning */}
+      {album && (() => { const d = Math.ceil((new Date(album.expires_at).getTime() - Date.now()) / 86400000); return d > 0 && d <= 3; })() && (
+        <div style={{ margin: "0 1rem 0.75rem", background: "rgba(255,170,0,0.1)", border: "1px solid rgba(255,170,0,0.4)", borderRadius: "0.75rem", padding: "0.75rem 1rem", fontSize: "0.82rem", color: "#ffaa00" }}>
+          ⏳ This album expires in {Math.ceil((new Date(album.expires_at).getTime() - Date.now()) / 86400000)} day{Math.ceil((new Date(album.expires_at).getTime() - Date.now()) / 86400000) === 1 ? "" : "s"} — save your photos before then.
+        </div>
+      )}
+
       {/* Save link prompt — shown once after joining */}
       {showSavePrompt && (
         <div style={{ margin: "0 1rem 0.75rem", background: "var(--card)", border: "1px solid var(--accent)", borderRadius: "0.75rem", padding: "0.9rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -384,7 +460,8 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", flexShrink: 0 }}>
             <button onClick={() => {
-              robustCopy(`${window.location.origin}/album/${albumId}`);
+              const hash = btoa(JSON.stringify({ guestId, guestToken, name }));
+              robustCopy(`${window.location.origin}/album/${albumId}#g=${hash}`);
               setSaveCopied(true);
               setTimeout(() => { setSaveCopied(false); setShowSavePrompt(false); }, 1500);
             }}
@@ -497,6 +574,9 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
                 <img src={item.thumbUrl} alt={item.guests?.name ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 {item.type === "video" && !isSel && (
                   <div style={{ position: "absolute", bottom: "0.35rem", right: "0.35rem", background: "rgba(0,0,0,0.6)", borderRadius: "0.2rem", padding: "0.1rem 0.3rem", fontSize: "0.65rem" }}>▶</div>
+                )}
+                {(item.mime === "image/heic" || item.mime === "image/heif") && !isMobileUA && !isSel && (
+                  <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.6)", borderRadius: "0.2rem", padding: "0.1rem 0.3rem", fontSize: "0.6rem", color: "rgba(255,255,255,0.8)" }}>HEIC</div>
                 )}
                 {/* Name label */}
                 <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent,rgba(0,0,0,0.65))", padding: "0.75rem 0.3rem 0.25rem", fontSize: "0.62rem", color: "rgba(255,255,255,0.85)", lineHeight: 1 }}>

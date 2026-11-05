@@ -77,6 +77,7 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
   }
 
   async function deleteMedia(mediaId: string) {
+    if (!confirm("Remove this photo from the album?")) return;
     await fetch(`/api/media/${mediaId}/host-delete`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -85,8 +86,24 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
     setMedia(prev => prev.filter(m => m.id !== mediaId));
   }
 
+  const [downloading, setDownloading] = useState(false);
   const guests = new Set(media.map(m => m.guest_id)).size;
   const uploaders = new Set(media.filter(m => m.thumbUrl).map(m => m.guest_id)).size;
+
+  async function downloadAll() {
+    if (!media.length) return;
+    setDownloading(true);
+    try {
+      for (const item of media) {
+        const ext = item.mime.split("/")[1] ?? "jpg";
+        const a = document.createElement("a");
+        a.href = `/api/download/${item.id}`;
+        a.download = `nightcap-${item.id}.${ext}`;
+        a.click();
+        await new Promise(r => setTimeout(r, 300));
+      }
+    } finally { setDownloading(false); }
+  }
 
   if (albumId && !hostToken) return (
     <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
@@ -146,6 +163,14 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
         </div>
       ) : (
         <div>
+          {media.length > 0 && (
+            <div style={{ padding: "0.6rem 1rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={downloadAll} disabled={downloading}
+                style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--accent)", background: "transparent", border: "1px solid var(--accent)", borderRadius: "0.5rem", padding: "0.35rem 0.85rem", cursor: downloading ? "default" : "pointer", opacity: downloading ? 0.5 : 1 }}>
+                {downloading ? "Downloading…" : `Download all (${media.length})`}
+              </button>
+            </div>
+          )}
           {media.filter(m => m.report_count > 0).length > 0 && (
             <div style={{ padding: "0.75rem 1rem", background: "#2a1a00", borderBottom: "1px solid var(--border)", fontSize: "0.85rem", color: "#ffaa00" }}>
               ⚠️ {media.filter(m => m.report_count > 0).length} reported item(s) — review below
