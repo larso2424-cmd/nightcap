@@ -11,12 +11,18 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [userEmail, setUserEmail] = useState<string|null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/session").then(r => r.json()).then(d => {
-      if (d.user?.email) setUserEmail(d.user.email);
+      if (d.user?.email) {
+        setUserEmail(d.user.email);
+      } else {
+        router.replace("/auth");
+      }
+      setSessionChecked(true);
     });
-  }, []);
+  }, [router]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +46,8 @@ export default function Home() {
 
     router.push(`/album/${data.albumId}/host`);
   }
+
+  if (!sessionChecked) return null;
 
   return (
     <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.5rem 3rem" }}>
