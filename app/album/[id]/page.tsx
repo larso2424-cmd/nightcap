@@ -98,6 +98,7 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const [filter, setFilter]             = useState<string>("all");
   const [uploadItems, setUploadItems]   = useState<UploadItem[]>([]);
   const [lightbox, setLightbox]         = useState<MediaItem|null>(null);
+  const [lightboxBlob, setLightboxBlob] = useState<Blob|null>(null);
   const [selected, setSelected]         = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode]     = useState(false);
   const [showInvite, setShowInvite]     = useState(false);
@@ -115,6 +116,13 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => { albumIdRef.current    = albumId;    }, [albumId]);
   useEffect(() => { guestIdRef.current    = guestId;    }, [guestId]);
   useEffect(() => { guestTokenRef.current = guestToken; }, [guestToken]);
+
+  // Pre-fetch blob when lightbox opens on iOS so share() can be called synchronously
+  useEffect(() => {
+    if (!lightbox || !/iPad|iPhone|iPod/.test(navigator.userAgent)) { setLightboxBlob(null); return; }
+    setLightboxBlob(null);
+    fetch(`/api/download/${lightbox.id}`).then(r => r.blob()).then(setLightboxBlob).catch(() => {});
+  }, [lightbox]);
 
   const hasActiveUploads = uploadItems.some(i => i.status === "waiting" || i.status === "uploading");
 
@@ -293,16 +301,17 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
 
   async function downloadSingle(item: MediaItem) {
     const proxyUrl = `/api/download/${item.id}`;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
-      // Open inline so iOS Safari shows the image — user can long-press → "Add to Photos"
-      window.open(`${proxyUrl}?inline=1`, "_blank");
-      return;
-    }
     const ext = item.mime.split("/")[1] ?? "jpg";
     const filename = `nightcap-${item.id}.${ext}`;
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    if (isAndroid && navigator.canShare) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS && navigator.canShare) {
+      // Use pre-fetched blob if available — keeps user gesture intact for share sheet
+      const blob: Blob = lightboxBlob ?? await fetch(proxyUrl).then(r => r.blob());
+      const file = new File([blob], filename, { type: item.mime });
+      if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file] }); return; }
+    }
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile && navigator.canShare) {
       try {
         const blob = await fetch(proxyUrl).then(r => r.blob());
         const file = new File([blob], filename, { type: item.mime });
