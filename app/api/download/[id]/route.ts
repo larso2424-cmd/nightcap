@@ -20,9 +20,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!r2Res.ok) return NextResponse.json({ error: "Fetch failed" }, { status: 502 });
 
   const ext = item.mime.split("/")[1] ?? "jpg";
+  const inline = new URL(req.url).searchParams.get("inline") === "1";
   const headers = new Headers({
     "Content-Type": item.mime,
-    "Content-Disposition": `attachment; filename="nightcap-${id}.${ext}"`,
+    "Content-Disposition": inline ? "inline" : `attachment; filename="nightcap-${id}.${ext}"`,
     "Cache-Control": "private, max-age=3600",
   });
 

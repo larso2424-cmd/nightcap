@@ -293,10 +293,16 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
 
   async function downloadSingle(item: MediaItem) {
     const proxyUrl = `/api/download/${item.id}`;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      // Open inline so iOS Safari shows the image — user can long-press → "Add to Photos"
+      window.open(`${proxyUrl}?inline=1`, "_blank");
+      return;
+    }
     const ext = item.mime.split("/")[1] ?? "jpg";
     const filename = `nightcap-${item.id}.${ext}`;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile && navigator.canShare) {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (isAndroid && navigator.canShare) {
       try {
         const blob = await fetch(proxyUrl).then(r => r.blob());
         const file = new File([blob], filename, { type: item.mime });
@@ -309,22 +315,6 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   async function saveSelected() {
     const toSave = media.filter(m => selected.has(m.id));
     if (!toSave.length) return;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile && navigator.canShare) {
-      try {
-        const files = await Promise.all(toSave.map(async item => {
-          const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
-          const ext  = item.mime.split("/")[1] ?? "jpg";
-          return new File([blob], `nightcap-${item.id}.${ext}`, { type: item.mime });
-        }));
-        if (navigator.canShare({ files })) {
-          await navigator.share({ files });
-          setSelectMode(false); setSelected(new Set());
-          return;
-        }
-      } catch {}
-    }
-    // Desktop: download each individually
     for (const item of toSave) await downloadSingle(item);
     setSelectMode(false); setSelected(new Set());
   }
@@ -332,17 +322,6 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   async function saveOthers() {
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile && navigator.canShare) {
-      try {
-        const files = await Promise.all(others.map(async item => {
-          const blob = await fetch(`/api/download/${item.id}`).then(r => r.blob());
-          const ext  = item.mime.split("/")[1] ?? "jpg";
-          return new File([blob], `nightcap-${item.id}.${ext}`, { type: item.mime });
-        }));
-        if (navigator.canShare({ files })) { await navigator.share({ files }); return; }
-      } catch {}
-    }
     for (const item of others) await downloadSingle(item);
   }
 
