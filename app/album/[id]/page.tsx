@@ -291,8 +291,8 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function saveAll() {
-    if (!media.length) return;
-    await shareMultiple(media);
+    if (!filtered.length) return;
+    await shareMultiple(filtered);
   }
 
   async function saveOthers() {
@@ -377,34 +377,32 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     <main style={{ minHeight: "100dvh", paddingBottom: "5rem" }}>
 
       {/* Header */}
-      <div style={{ padding: "0.75rem 1rem 0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span className="display" style={{ fontSize: "1rem", letterSpacing: "0.08em", color: "var(--muted)" }}>NightCap</span>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          {isAlbumOwner ? (
-            <a href={`/album/${albumId}/host`}
-              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", cursor: "pointer", textDecoration: "none" }}>
-              Host page
-            </a>
-          ) : userSignedIn ? (
-            <a href="/dashboard"
-              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", textDecoration: "none" }}>
-              Your albums
-            </a>
-          ) : (
-            <a href="/auth"
-              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", textDecoration: "none" }}>
-              Sign in
-            </a>
-          )}
-          <button onClick={() => setShowInvite(v => !v)}
-            style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
-            Invite & save link
-          </button>
-          <button onClick={() => { setSelectMode(v => !v); setSelected(new Set()); }}
-            style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: selectMode ? "1px solid var(--accent)" : "1px solid var(--border)", background: selectMode ? "var(--accent)" : "transparent", color: selectMode ? "var(--accent-fg)" : "var(--muted)", cursor: "pointer" }}>
-            {selectMode ? "Cancel" : "Select"}
-          </button>
-        </div>
+      <div style={{ padding: "0.75rem 1rem 0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span className="display" style={{ fontSize: "1rem", letterSpacing: "0.08em", color: "var(--muted)", marginRight: "auto" }}>NightCap</span>
+        {isAlbumOwner ? (
+          <a href={`/album/${albumId}/host`}
+            style={{ padding: "0.35rem 0.65rem", borderRadius: "2rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Host
+          </a>
+        ) : userSignedIn ? (
+          <a href="/dashboard"
+            style={{ padding: "0.35rem 0.65rem", borderRadius: "2rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Albums
+          </a>
+        ) : (
+          <a href="/auth"
+            style={{ padding: "0.35rem 0.65rem", borderRadius: "2rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Sign in
+          </a>
+        )}
+        <button onClick={() => setShowInvite(v => !v)}
+          style={{ padding: "0.35rem 0.65rem", borderRadius: "2rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          Invite
+        </button>
+        <button onClick={() => { setSelectMode(v => !v); setSelected(new Set()); }}
+          style={{ padding: "0.35rem 0.65rem", borderRadius: "2rem", fontSize: "0.78rem", fontWeight: 600, border: selectMode ? "1px solid var(--accent)" : "1px solid var(--border)", background: selectMode ? "var(--accent)" : "transparent", color: selectMode ? "var(--accent-fg)" : "var(--muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          {selectMode ? "Cancel" : "Select"}
+        </button>
       </div>
 
       {/* Album name + stats */}
@@ -577,16 +575,9 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
       {/* Fixed bottom bar */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "0.75rem 1rem", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))", background: "rgba(10,10,10,0.92)", borderTop: "1px solid var(--border)", backdropFilter: "blur(12px)", display: "flex", gap: "0.5rem", zIndex: 40 }}>
         {selectMode ? (
-          <>
-            <button onClick={saveOthers} disabled={othersCount === 0}
-              style={{ flex: 1, padding: "0.75rem", borderRadius: "0.6rem", border: "1px solid var(--border)", background: "transparent", color: othersCount === 0 ? "var(--muted)" : "var(--fg)", fontWeight: 600, fontSize: "0.88rem", cursor: othersCount === 0 ? "default" : "pointer" }}>
-              Save theirs ({othersCount})
-            </button>
-            <button onClick={saveSelected} disabled={selected.size === 0}
-              style={{ flex: 1, padding: "0.75rem", borderRadius: "0.6rem", border: "none", background: selected.size === 0 ? "rgba(180,210,80,0.3)" : "var(--accent)", color: selected.size === 0 ? "var(--muted)" : "var(--accent-fg)", fontWeight: 700, fontSize: "0.88rem", cursor: selected.size === 0 ? "default" : "pointer" }}>
-              {selected.size > 0 ? `Save ${selected.size}` : "Select photos"}
-            </button>
-          </>
+          <button onClick={saveSelected} disabled={selected.size === 0} style={{ flex: 1, padding: "0.75rem", borderRadius: "0.6rem", border: "none", background: selected.size === 0 ? "rgba(180,210,80,0.3)" : "var(--accent)", color: selected.size === 0 ? "var(--muted)" : "var(--accent-fg)", fontWeight: 700, fontSize: "0.95rem", cursor: selected.size === 0 ? "default" : "pointer" }}>
+            {selected.size > 0 ? `Save ${selected.size} photo${selected.size === 1 ? "" : "s"}` : "Tap photos to select"}
+          </button>
         ) : (
           <>
             {media.length > 0 && (
