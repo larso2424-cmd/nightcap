@@ -1,91 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import copy from "@/lib/copy";
+import { ALLOWED_MIME, ALLOWED_EXT, MAX_PHOTO, MAX_VIDEO, inferMime, putWithProgress, withRetry, generateThumb, dataUrlToBlob, fmtSize, type UploadItem } from "@/lib/upload";
 
 const c = copy.en;
 
-const ALLOWED_MIME = new Set(["image/jpeg","image/png","image/webp","image/heic","image/heif","video/mp4","video/quicktime"]);
-const ALLOWED_EXT  = new Set(["jpg","jpeg","png","webp","heic","heif","mp4","mov"]);
-const MAX_PHOTO = 30  * 1024 * 1024;
-const MAX_VIDEO = 1024 * 1024 * 1024;
-
-function inferMime(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string,string> = { jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp",heic:"image/heic",heif:"image/heif",mp4:"video/mp4",mov:"video/quicktime" };
-  return map[ext] ?? "application/octet-stream";
-}
-
-function putWithProgress(url: string, body: File|Blob, contentType: string, onProgress: (pct: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round(e.loaded/e.total*100)); };
-    xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`Upload failed (${xhr.status})`));
-    xhr.onerror = () => reject(new Error("Network error — check your connection"));
-    xhr.send(body);
-  });
-}
-
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
-  let last: Error = new Error("Failed");
-  for (let i = 0; i < attempts; i++) {
-    try { return await fn(); }
-    catch (e: any) {
-      last = e;
-      if (/401|403|not allowed|too large/i.test(e.message ?? "")) throw e;
-      if (i < attempts - 1) await new Promise(r => setTimeout(r, 1000 * 2 ** i));
-    }
-  }
-  throw last;
-}
-
-type Album     = { id: string; name: string; expires_at: string };
+type Album     = { id: string; name: string; expires_at: string; user_id: string };
 type MediaItem = { id: string; guest_id: string; url: string; thumbUrl: string; type: string; mime: string; width?: number; height?: number; created_at: string; guests: { name: string }; };
-type UploadItem= { id: string; file: File; status: "waiting"|"uploading"|"done"|"failed"; progress: number; error?: string; };
-
-function generateThumb(file: File): Promise<{ dataUrl: string; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    if (file.type.startsWith("video/") || /\.(mov|mp4)$/i.test(file.name)) {
-      const video = document.createElement("video");
-      video.src = url; video.muted = true; video.playsInline = true;
-      const t = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error("Video thumbnail timeout")); }, 15000);
-      video.onloadeddata = () => { video.currentTime = 0.5; };
-      video.onseeked = () => {
-        clearTimeout(t);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.min(video.videoWidth || 400, 400);
-        canvas.height = Math.round(canvas.width * (video.videoHeight||300) / (video.videoWidth||400));
-        canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
-        resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.7), width: video.videoWidth, height: video.videoHeight });
-        URL.revokeObjectURL(url);
-      };
-      video.onerror = () => { clearTimeout(t); URL.revokeObjectURL(url); reject(new Error("Could not read video")); };
-    } else {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.min(img.naturalWidth, 400);
-        canvas.height = Math.round(canvas.width * img.naturalHeight / img.naturalWidth);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.7), width: img.naturalWidth, height: img.naturalHeight });
-        URL.revokeObjectURL(url);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
-      img.src = url;
-    }
-  });
-}
-
-async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  return fetch(dataUrl).then(r => r.blob());
-}
-
-function fmtSize(bytes: number) {
-  if (bytes < 1024*1024) return `${(bytes/1024).toFixed(0)} KB`;
-  return `${(bytes/1024/1024).toFixed(1)} MB`;
-}
 
 export default function AlbumPage({ params }: { params: Promise<{ id: string }> }) {
   const [albumId, setAlbumId]           = useState("");
@@ -108,7 +29,10 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   const [joining, setJoining]           = useState(false);
   const [albumError, setAlbumError]     = useState("");
   const [error, setError]               = useState("");
+  const [isAlbumOwner, setIsAlbumOwner] = useState(false);
+  const [userSignedIn, setUserSignedIn] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const blobCacheRef = useRef<Map<string, Blob>>(new Map());
 
   const albumIdRef    = useRef(albumId);
   const guestIdRef    = useRef(guestId);
@@ -121,8 +45,22 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     if (!lightbox || !/iPad|iPhone|iPod/.test(navigator.userAgent)) { setLightboxBlob(null); return; }
     setLightboxBlob(null);
-    fetch(`/api/download/${lightbox.id}`).then(r => r.blob()).then(setLightboxBlob).catch(() => {});
+    fetch(`/api/download/${lightbox.id}`).then(r => r.blob()).then(b => {
+      setLightboxBlob(b);
+      blobCacheRef.current.set(lightbox.id, b);
+    }).catch(() => {});
   }, [lightbox]);
+
+  // On iOS: pre-fetch blobs for all media when select mode turns on
+  useEffect(() => {
+    if (!selectMode || !/iPad|iPhone|iPod/.test(navigator.userAgent)) return;
+    for (const item of media) {
+      if (!blobCacheRef.current.has(item.id)) {
+        fetch(`/api/download/${item.id}`).then(r => r.blob()).then(b => blobCacheRef.current.set(item.id, b)).catch(() => {});
+      }
+    }
+  }, [selectMode, media]);
+
 
   const hasActiveUploads = uploadItems.some(i => i.status === "waiting" || i.status === "uploading");
 
@@ -141,6 +79,13 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
         if (d.error || !r.ok) { setAlbumError(d.error ?? "Album not found"); return; }
         if (new Date(d.expires_at) < new Date()) { setAlbumError("This album has expired"); return; }
         setAlbum(d);
+        // Check ownership
+        fetch("/api/auth/session").then(sr => sr.json()).then(sd => {
+          if (sd.user) {
+            setUserSignedIn(true);
+            setIsAlbumOwner(sd.user.id === d.user_id);
+          }
+        }).catch(() => {});
       });
       try {
         // Try URL hash first (cross-device saved link)
@@ -321,17 +266,39 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
     const a = document.createElement("a"); a.href = proxyUrl; a.download = filename; a.click();
   }
 
+  async function shareMultiple(items: MediaItem[]) {
+    if (!items.length) return;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS && navigator.canShare) {
+      const blobs = await Promise.all(items.map(item =>
+        blobCacheRef.current.get(item.id) ?? fetch(`/api/download/${item.id}`).then(r => r.blob())
+      ));
+      const files = blobs.map((blob, i) => {
+        const item = items[i];
+        const ext = item.mime.split("/")[1] ?? "jpg";
+        return new File([blob], `nightcap-${item.id}.${ext}`, { type: item.mime });
+      });
+      if (navigator.canShare({ files })) { navigator.share({ files }); return; }
+    }
+    for (const item of items) await downloadSingle(item);
+  }
+
   async function saveSelected() {
     const toSave = media.filter(m => selected.has(m.id));
     if (!toSave.length) return;
-    for (const item of toSave) await downloadSingle(item);
+    await shareMultiple(toSave);
     setSelectMode(false); setSelected(new Set());
+  }
+
+  async function saveAll() {
+    if (!media.length) return;
+    await shareMultiple(media);
   }
 
   async function saveOthers() {
     const others = media.filter(m => m.guest_id !== guestId);
     if (!others.length) return;
-    for (const item of others) await downloadSingle(item);
+    await shareMultiple(others);
   }
 
   async function deleteMedia(mediaId: string) {
@@ -413,6 +380,22 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
       <div style={{ padding: "0.75rem 1rem 0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span className="display" style={{ fontSize: "1rem", letterSpacing: "0.08em", color: "var(--muted)" }}>NightCap</span>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          {isAlbumOwner ? (
+            <a href={`/album/${albumId}/host`}
+              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", cursor: "pointer", textDecoration: "none" }}>
+              Host page
+            </a>
+          ) : userSignedIn ? (
+            <a href="/dashboard"
+              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", textDecoration: "none" }}>
+              Your albums
+            </a>
+          ) : (
+            <a href="/auth"
+              style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", textDecoration: "none" }}>
+              Sign in
+            </a>
+          )}
           <button onClick={() => setShowInvite(v => !v)}
             style={{ padding: "0.35rem 0.75rem", borderRadius: "2rem", fontSize: "0.8rem", fontWeight: 600, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
             Invite & save link
@@ -605,11 +588,19 @@ export default function AlbumPage({ params }: { params: Promise<{ id: string }> 
             </button>
           </>
         ) : (
-          <label style={{ flex: 1, background: "var(--accent)", color: "var(--accent-fg)", padding: "0.85rem", borderRadius: "0.6rem", fontWeight: 700, fontSize: "1rem", cursor: "pointer", textAlign: "center", display: "block" }}>
-            {c.upload.cta}
-            <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }}
-              onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-          </label>
+          <>
+            {media.length > 0 && (
+              <button onClick={saveAll}
+                style={{ padding: "0.85rem 1rem", borderRadius: "0.6rem", border: "1px solid var(--border)", background: "transparent", color: "var(--fg)", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", whiteSpace: "nowrap" }}>
+                Save all
+              </button>
+            )}
+            <label style={{ flex: 1, background: "var(--accent)", color: "var(--accent-fg)", padding: "0.85rem", borderRadius: "0.6rem", fontWeight: 700, fontSize: "1rem", cursor: "pointer", textAlign: "center", display: "block" }}>
+              {c.upload.cta}
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }}
+                onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+            </label>
+          </>
         )}
       </div>
 
